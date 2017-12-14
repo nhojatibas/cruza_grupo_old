@@ -23,7 +23,7 @@ import time as t
 # Constantes
 vServer = "http://monitor.ciasc.gov.br"
 vUserName = "nholiveira@ciasc.sc.gov.br"
-vPassword = "211172"
+vPassword = ""
 
 _vermelho = GdkPixbuf.Pixbuf.new_from_file("vermelho.png")
 _verde = GdkPixbuf.Pixbuf.new_from_file("verde.png")
