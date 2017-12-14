@@ -1,0 +1,223 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+
+# cliza = cliente zabbix (brega mas tá bom por hora)
+
+# Carregando bibliotecas
+
+# Glade (carregando bibliotecas do Glade)
+import gi
+gi.require_version('Gtk', '3.0')
+from gi.repository import Gtk
+
+# Zabbix (carregando biblioteca da API do Zabbix e biblioteca de funcoes criadas)
+from zabbix_api import ZabbixAPI
+from zabbix_functions import *
+
+# Bibliotecas de apoio
+from datetime import datetime, date, time
+import time as t
+
+
+# Constantes
+vServer = "http://monitor.ciasc.gov.br"
+vUserName = "nholiveira@ciasc.sc.gov.br"
+vPassword = "211172"
+
+####################################onButtonSearch_clicked
+# Abrindo a sessão com o servidor zabbix
+vZapi=ZabbixAPI(server=vServer, log_level=0)
+vZapi.login(vUserName, vPassword)
+
+# Buscando a lista de grupos no servidor Zabbix
+vGroupListIni=vZapi.hostgroup.get({"output": ["name", "groupid"]})
+
+class _cliza:
+    def __init__(self):
+
+        # Carrega do Glade os elementos da janela principal (cruza_grupo.glade), em variaveis self.main_window
+	#print self
+
+        self.main_window=Gtk.Builder()
+        self.main_window.add_from_file("cruza_grupo.glade")
+	self.main_window.connect_signals(self) 
+
+        self.main_window.janela_principal=self.main_window.get_object("_janela_principal")
+
+        self.main_window.treeview_lista_origem=self.main_window.get_object("_treeview_lista_origem")
+        self.main_window.liststore_lista_origem=self.main_window.get_object("_liststore_lista_origem")
+
+        self.main_window.button_refresh=self.main_window.get_object("_button_refresh")
+        self.main_window.entry_filtragrupo=self.main_window.get_object("_entry_filtragrupo")
+
+        self.main_window.button_add=self.main_window.get_object("_button_add")
+        self.main_window.button_remove=self.main_window.get_object("_button_remove")
+
+        self.main_window.button_search=self.main_window.get_object("_button_search")
+
+        self.main_window.treeview_lista_destino=self.main_window.get_object("_treeview_lista_destino")
+	self.main_window.liststore_lista_destino=self.main_window.get_object("_liststore_lista_destino")
+
+# Cargas iniciais
+        for grupo in vGroupListIni:
+#	     print grupo
+            self.main_window.liststore_lista_origem.append([grupo['name'],int(grupo['groupid'])])
+
+# Declarando o filtro a ser aplicado na "self.main_window.liststore_lista_origem"
+	self.treemodelfilter_lista_origem=self.main_window.liststore_lista_origem.filter_new()
+        self.treemodelfilter_lista_origem.set_visible_func(self.treemodelfilter_lista_origem_func)
+
+# Colocando o loop do Gtk para rodar
+        self.main_window.janela_principal.show_all()
+
+    def run(self):
+	print "Ao rodar"
+	print self
+	print dir(self)
+        Gtk.main()
+
+
+# Função de filtro a ser aplicado em "self.glade.treeview_lista_origem"
+#    def treemodelfilter_lista_origem_func(self, model, iter, data):
+    def treemodelfilter_lista_origem_func(self, model, iter, data):
+        #print "self", dir(self)
+        if len(self.current_filter_lista_origem) < 1:
+            return True
+        else:
+            return self.current_filter_lista_origem in model[iter][0]
+	    #print iter
+
+        
+# Ligando os SINAIS do Glade a funções da classe (no Glade chamadas de Handler)
+
+# Sinais da Janela Principal
+
+# Fechando a aplicacao
+    def onDeleteWindow(self, *args):
+ 	Gtk.main_quit(*args)
+
+# Pressionando o botão "atualiza"
+    def onButtonRefreshClicked(self, *args):
+        self.main_window.treeview_lista_origem.set_model(self.treemodelfilter_lista_origem)    # define o moldel do filtro como model a ser exibido pela treeview
+        self.current_filter_lista_origem=self.main_window.entry_filtragrupo.get_text()         # pega o parâmetro de filtragem do campo - self.glade.entry_filtragrupo.get_text() 
+        self.treemodelfilter_lista_origem.refilter()                                           # aplica o filtro
+
+# Pressionando o botão "+" (add)
+    def onButtonAdd_clicked(self, *args):
+        _treeview_origem_full = self.main_window.treeview_lista_origem.get_selection()
+        _treeview_origem_selected = _treeview_origem_full.get_selected()
+	print "_treeview_origem_full:", _treeview_origem_full
+	print "_treeview_origem_selected:", _treeview_origem_selected
+	print "_treeview_origem_selected[1]:", _treeview_origem_selected[1]
+        if _treeview_origem_selected[1] != None:
+            (_modelo, _iter) = _treeview_origem_selected
+            #print "selected-->", _modelo[_iter], " : ",  _modelo[_iter][0], " : ", _iter.stamp, " : ", type(_iter)
+            #print self.main_window.button_search.get_events()
+            if _modelo[_iter][0] not in [_linha[0] for _linha in self.main_window.liststore_lista_destino]: # Verifica se existe na lista para adicionar (só se nao existe)
+		print "modelo[iter]:",[_modelo[_iter][0]],[_modelo[_iter][1]]
+                self.main_window.liststore_lista_destino.append([_modelo[_iter][0],_modelo[_iter][1]])
+#	print self.main_window.button_search.get_label()
+#       print self.main_window.button_search.activate()
+
+# Pressionando o botão "-" (remove)
+    def onButtonRemove_clicked(self, *args):
+        _treeview_destino_full = self.main_window.treeview_lista_destino.get_selection()
+        _treeview_destino_selected = _treeview_destino_full.get_selected()
+        if _treeview_destino_selected[1] != None:
+            (_modelo, _iter) = _treeview_destino_selected
+            self.main_window.liststore_lista_destino.remove(_iter)
+
+# Pressionando o botao "Procurar"
+    def onButtonSearch_clicked(self, *args):
+#    def on(self, *args):
+        print "Procurou"
+	print dir(self)
+	print args
+	print "Lista Destino: ",self.main_window.liststore_lista_destino
+	_sub_window=_cliza_sub(self.main_window.liststore_lista_destino)
+	_sub_window.run_sub()
+
+
+# Sinais da Sub Janela
+#    def onsubDeleteWindow(self, *args):
+#        Gtk.main_quits(*args)
+
+class _cliza_sub:
+    def __init__(self, lista_grupos):
+
+        # Carrega do Glade os elementos da sub janela (cruza_grupo_sub.glade), em variaveis self.glade.sub
+        self.sub_window=Gtk.Builder()
+        self.sub_window.add_from_file("cruza_grupo_sub.glade")
+        self.sub_window.connect_signals(self)
+
+        self.sub_window.janela_principal=self.sub_window.get_object("_sub_window")
+	self.sub_window.info_label=self.sub_window.get_object("_sub_info_label")
+	self.sub_window.treeviewgrupo=self.sub_window.get_object("_sub_selected_groups_treeview")
+	self.sub_window.liststoregrupo=self.sub_window.get_object("_sub_selected_groups_liststore")
+#	self.sub_window.treeviewhost=self.sub_window.get_object("_sub_hosts_treeview")
+
+	self.sub_window.lista = lista_grupos
+	
+
+# Colocando o loop do Gtk para rodar
+        self.sub_window.janela_principal.show_all()
+
+    def run_sub(self):
+#	print dir(self)
+#	print "Lida da sub: ",len(self.sub_window.lista), self.sub_window.lista
+#	print "Antes :", len(self.sub_window.liststoregrupo)
+
+# Aqui recebemos a liststore com os grupos selecionados e a usamos como base para:
+#
+#  1 - Gerar uma LISTA _lista_grupo com os group_id de cada grupo selecionado
+#  2 - Gerar um DICT _lista_host (chave = group_id, data = lista de host_id dos Hosts que pertencem ao grupo)
+#
+	_lista_grupo=[]
+	_lista_host={}
+	_hosts=[]
+	_intersec_hosts=[]
+
+	for _iter_liststore in self.sub_window.lista:
+#		print "n..:",n,n[1]
+		self.sub_window.liststoregrupo.append([_iter_liststore[0]]) # adiciona group_name a liststore da subjanela
+		_lista_grupo.append(_iter_liststore[1]) # adiciona group_id a _lista_grupo
+#	print "_lista_grupo..:", _lista_grupo
+	_old = []
+	_inter = []
+	for _group_id in _lista_grupo:
+		_hosts_zabbix=vZapi.host.get({"groupids": _group_id, "output": "hostid"}) # faz a pesquisa no API do Zabbix e retorna uma lista de dicionario com os "host_id" que pertencem ao grupo
+		print _group_id,":",_hosts_zabbix
+		for _host_dict in _hosts_zabbix:
+#			print _host_dict['hostid']
+#			print type(_host_dict['hostid'])
+			_hosts.append(_host_dict['hostid']) # adiciona o "host_id" a lista _hosts
+#			print "hosts...:", _hosts
+		_lista_host[str(_group_id)]=_hosts # carrega o dicionario "_lista_host" usando "str(_group_id)" como chave e a lista "hosts" como DADO
+		_hosts=[] #descarrega a lista _hosts para gerar novamente com dados de outro grupo se for o caso
+		if len(_old)>0:
+			print "antes : ", _old, _inter
+			if len(_inter)<1:
+				_inter=list(set(_old).intersection(set(_lista_host[str(_group_id)])))
+			else:
+				_inter=list(set(_inter).intersection(set(_old)).intersection(set(_lista_host[str(_group_id)])))
+		_old = _lista_host[str(_group_id)]
+		print "depois : ", _old, _inter
+#	_lista_host[str(n)]=_hosts
+	print len(_lista_host)
+	print _lista_host
+	print _inter
+#		for hostid in _lista_host[n]:
+#			print hostid['hostid']
+#		print n,":",_hosts[n]
+#	print "Depois: ",len(self.sub_window.liststoregrupo)
+        Gtk.main()
+
+# Sinais da Janela Sub
+
+# Fechando a aplicacao
+    def onsubDeleteWindow(self, *args):
+        Gtk.main_quit(*args)
+
+
+_main_window=_cliza()
+_main_window.run()
